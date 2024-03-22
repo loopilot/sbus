@@ -219,6 +219,14 @@ func (h *handle[T]) Use(m ...middlewareFunc[T]) {
 	h.middlewares = append(h.middlewares, m...)
 }
 
+func (h *handle[T]) Name() string {
+	return h.name
+}
+
+func (h *handle[T]) HandleFunc() interface{} {
+	return h.handleFunc
+}
+
 func (h *handle[T]) run(ctx context.Context, data T) error {
 	handleFunc := h.handleFunc
 
@@ -226,15 +234,13 @@ func (h *handle[T]) run(ctx context.Context, data T) error {
 		handleFunc = h.middlewares[i](handleFunc)
 	}
 
-	return handleFunc(ctx, data)
+	return handleFunc(h.setupPublishContext(ctx), data)
 }
 
-func (h *handle[T]) Name() string {
-	return h.name
-}
+func (h *handle[T]) setupPublishContext(c context.Context) context.Context {
+	ctx := context.WithValue(c, "name", h.name)
 
-func (h *handle[T]) HandleFunc() interface{} {
-	return h.handleFunc
+	return ctx
 }
 
 // newHandler creates a new handle

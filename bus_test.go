@@ -191,3 +191,19 @@ func lowerMiddleware[T string](next HandleFunc[T]) HandleFunc[T] {
 		return next(ctx, T(lower))
 	}
 }
+
+// func lowerMiddleware2[T string](h *handle[T]) *handle[T] {
+// 	h.HandleFunc() = func(ctx context.Context, data T) error {
+// 		str, ok := any(data).(string)
+
+// 		if !ok {
+// 			return fmt.Errorf("expected data to be of type string")
+// 		}
+
+// 		lower := strings.ToLower(str)
+
+// 		return h.next(ctx, T(lower))
+// 	}
+
+// 	return h
+// }
