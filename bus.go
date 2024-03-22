@@ -53,7 +53,7 @@ func New() *bus {
 }
 
 // Subscribe adds a handler to a topic
-func Subscribe[T input](topic string, fn handleFunc[T], opts ...subscribeOption) *handle[T] {
+func Subscribe[T input](topic string, fn HandleFunc[T], opts ...subscribeOption) *handle[T] {
 	cfg := newSubscribeConfig(opts...)
 	hdl := newHandler[T](fn, cfg)
 
@@ -206,12 +206,12 @@ type handler interface {
 var _ handler = (*handle[input])(nil)
 
 // handleFunc is a function that handles the data of a topic
-type handleFunc[T input] func(context.Context, T) error
+type HandleFunc[T input] func(context.Context, T) error
 
 // handle is a struct that holds the name and the function of a handle
 type handle[T input] struct {
 	name        string
-	handleFunc  handleFunc[T]
+	handleFunc  HandleFunc[T]
 	middlewares []middlewareFunc[T]
 }
 
@@ -238,7 +238,7 @@ func (h *handle[T]) HandleFunc() interface{} {
 }
 
 // newHandler creates a new handle
-func newHandler[T input](handleFunc handleFunc[T], cfg *pubsubConfig) *handle[T] {
+func newHandler[T input](handleFunc HandleFunc[T], cfg *pubsubConfig) *handle[T] {
 	return &handle[T]{
 		name:        cfg.name,
 		handleFunc:  handleFunc,
@@ -247,4 +247,4 @@ func newHandler[T input](handleFunc handleFunc[T], cfg *pubsubConfig) *handle[T]
 }
 
 // middlewareFunc is a function that wraps a handleFunc
-type middlewareFunc[T input] func(handleFunc[T]) handleFunc[T]
+type middlewareFunc[T input] func(HandleFunc[T]) HandleFunc[T]

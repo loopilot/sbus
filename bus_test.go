@@ -178,7 +178,7 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware[T string](next handleFunc[T]) handleFunc[T] {
+func lowerMiddleware[T string](next HandleFunc[T]) HandleFunc[T] {
 	return func(ctx context.Context, data T) error {
 		str, ok := any(data).(string)
 
