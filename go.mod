@@ -1,3 +1,3 @@
-module github.com/ruanjoppert/superbus
+module github.com/loopilot/sbus
 
 go 1.22

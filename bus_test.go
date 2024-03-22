@@ -120,21 +120,6 @@ func TestSubscribe_Multiple(t *testing.T) {
 	if _, ok := defaultBus.getTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
-	//  else {
-	// 	for i, hndl := range handlers {
-	// 		h, ok := hndl.(*handle[string])
-
-	// 		if !ok {
-	// 			t.Error("expected handler to be of type handle[string]")
-	// 		}
-
-	// 		if h.name != fmt.Sprintf("greeting:%d", i+1) {
-	// 			t.Error("expected handler name to be greeting")
-	// 		}
-	// 	}
-	// }
-
-	// t.Fail()
 }
 
 func TestPublish(t *testing.T) {
