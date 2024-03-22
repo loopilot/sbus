@@ -30,15 +30,11 @@ func TestSubscribe(t *testing.T) {
 
 	b := New()
 
-	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		fmt.Println("Hello, " + name)
 
 		return nil
 	})
-
-	if err != nil {
-		t.Error("expected no error")
-	}
 
 	if _, ok := b.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
@@ -51,15 +47,11 @@ func TestSubscribe_WithtBus(t *testing.T) {
 	New() // create default bus
 	b := New()
 
-	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		fmt.Println("Hello, " + name)
 
 		return nil
 	}, WithBus(b))
-
-	if err != nil {
-		t.Error("expected no error")
-	}
 
 	if _, ok := b.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
@@ -75,20 +67,16 @@ func TestSubscribe_WithtName(t *testing.T) {
 
 	New()
 
-	err := Subscribe("topic:greeting", func(ctx context.Context, name string) error {
+	Subscribe("topic:greeting", func(ctx context.Context, name string) error {
 		fmt.Println("Hello, " + name)
 
 		return nil
 	}, WithName("greeting"))
 
-	if err != nil {
-		t.Error("expected no error")
-	}
-
 	if handlers, ok := defaultBus.GetTopic("topic:greeting"); !ok {
 		t.Error("expected topic to exist")
 	} else {
-		h, ok := handlers[0].(handler[string])
+		h, ok := handlers[0].(*handler[string])
 
 		if !ok {
 			t.Error("expected handler to be of type handler[string]")
@@ -105,31 +93,23 @@ func TestSubscribe_Multiple(t *testing.T) {
 
 	New()
 
-	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		fmt.Println("Hello, " + name)
 
 		return nil
 	}, WithName("greeting:1"))
 
-	if err != nil {
-		t.Error("expected no error")
-	}
-
-	err = Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		fmt.Println("Hello, " + name)
 
 		return nil
 	}, WithName("greeting:2"))
 
-	if err != nil {
-		t.Error("expected no error")
-	}
-
 	if handlers, ok := defaultBus.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	} else {
 		for i, hndl := range handlers {
-			h, ok := hndl.(handler[string])
+			h, ok := hndl.(*handler[string])
 
 			if !ok {
 				t.Error("expected handler to be of type handler[string]")
@@ -148,21 +128,13 @@ func TestPublish(t *testing.T) {
 	New()
 
 	val := "Benbe"
-	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		val = name
 
 		return nil
 	})
 
-	if err != nil {
-		t.Error("expected no error")
-	}
-
-	err = Publish("greeting", context.Background(), "Benbe")
-
-	if err != nil {
-		t.Error("expected no error")
-	}
+	Publish("greeting", context.Background(), "Benbe")
 
 	if val != "Benbe" {
 		t.Error("expected val to be Benbe")
@@ -175,21 +147,13 @@ func TestPublish_WithMiddleware(t *testing.T) {
 	New()
 
 	val := ""
-	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+	Subscribe("greeting", func(ctx context.Context, name string) error {
 		val = name
 
 		return nil
-	}, WithMiddleware(lowerMiddleware))
+	}).Use(lowerMiddleware)
 
-	if err != nil {
-		t.Error("expected no error")
-	}
-
-	err = Publish("greeting", context.Background(), "Benbe")
-
-	if err != nil {
-		t.Error("expected no error")
-	}
+	Publish("greeting", context.Background(), "Benbe")
 
 	if val != "benbe" {
 		t.Error("expected val to be benbe")
@@ -200,11 +164,9 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware(next middlewareHandlerFunc) middlewareHandlerFunc {
-	return func(ctx context.Context, data input) error {
+func lowerMiddleware[T string](next handlerFunc[T]) handlerFunc[T] {
+	return func(ctx context.Context, data T) error {
 		str, ok := any(data).(string)
-
-		fmt.Println("eaeae222", str, ok)
 
 		if !ok {
 			return fmt.Errorf("expected data to be of type string")
@@ -212,6 +174,6 @@ func lowerMiddleware(next middlewareHandlerFunc) middlewareHandlerFunc {
 
 		lower := strings.ToLower(str)
 
-		return next(ctx, lower)
+		return next(ctx, T(lower))
 	}
 }
