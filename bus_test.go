@@ -165,7 +165,7 @@ func TestPublish_WithMiddleware(t *testing.T) {
 		val = name
 
 		return nil
-	}).Use(lowerMiddleware)
+	}).Use(lowerMiddleware, LogMiddleware, OtelMiddleware)
 
 	Publish("greeting", context.Background(), "Benbe")
 
@@ -192,18 +192,10 @@ func lowerMiddleware[T string](next HandleFunc[T]) HandleFunc[T] {
 	}
 }
 
-// func lowerMiddleware2[T string](h *handle[T]) *handle[T] {
-// 	h.HandleFunc() = func(ctx context.Context, data T) error {
-// 		str, ok := any(data).(string)
+func LogMiddleware[T any](next HandleFunc[T]) HandleFunc[T] {
+	return func(ctx context.Context, data T) error {
+		fmt.Printf("data: %v\n", data)
 
-// 		if !ok {
-// 			return fmt.Errorf("expected data to be of type string")
-// 		}
-
-// 		lower := strings.ToLower(str)
-
-// 		return h.next(ctx, T(lower))
-// 	}
-
-// 	return h
-// }
+		return next(ctx, data)
+	}
+}
