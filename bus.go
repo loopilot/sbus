@@ -51,8 +51,9 @@ func New() *bus {
 func Subscribe[T input](topic string, fn handlerFunc[T], opts ...subscribeOptionFunc) error {
 	c := newSubscribeConfig(opts...)
 	h := handler[T]{
-		name: c.name,
-		fn:   fn,
+		name:        c.name,
+		fn:          fn,
+		middlewares: c.middlewares,
 	}
 
 	if c.bus == nil {
@@ -93,8 +94,9 @@ func Publish[T input](topic string, ctx context.Context, data T) error {
 
 // subscribeConfig allows to configure the subscription of a handler
 type subscribeConfig struct {
-	name string
-	bus  *bus
+	name        string
+	bus         *bus
+	middlewares []middlewareFunc
 }
 
 type subscribeOptionFunc func(*subscribeConfig)
@@ -110,6 +112,13 @@ func WithName(name string) subscribeOptionFunc {
 func WithBus(b *bus) subscribeOptionFunc {
 	return func(c *subscribeConfig) {
 		c.bus = b
+	}
+}
+
+// WithMiddleware adds a middleware to the handler
+func WithMiddleware(m middlewareFunc) subscribeOptionFunc {
+	return func(c *subscribeConfig) {
+		c.middlewares = append(c.middlewares, m)
 	}
 }
 
@@ -133,16 +142,38 @@ type handlerFunc[T input] func(context.Context, T) error
 type handler[T input] struct {
 	name        string
 	fn          handlerFunc[T]
-	middlewares []middlewareFunc[T]
+	middlewares []middlewareFunc
 }
 
 func (h *handler[T]) run(ctx context.Context, data T) error {
-	for _, m := range h.middlewares {
-		h.fn = m(h.fn)
+	fmt.Printf("asdasd %T\n", h.fn)
+
+	// middlewareHandler := h.fn
+
+	// middlewareHandler(ctx, data)
+
+	for i := len(h.middlewares) - 1; i >= 0; i-- {
+		currentMiddleware := h.middlewares[i]
+
+		_, ok := any(currentMiddleware).(middlewareFunc)
+
+		if !ok {
+			fmt.Println("INVALID_MIDDLEWARE: The middleware is not compatible with the handler")
+			continue
+		}
+
+		// middlewareHandler = xd(middlewareHandler)
 	}
+
+	// for _, m := range h.middlewares {
+	// 	h.fn = m(h.fn)
+	// }
 
 	return h.fn(ctx, data)
 }
 
+type middlewareHandlerFunc func(context.Context, input) error
+
 // middlewareFunc is a function that wraps a handlerFunc
-type middlewareFunc[T input] func(handlerFunc[T]) handlerFunc[T]
+type middlewareFunc func(middlewareHandlerFunc) middlewareHandlerFunc
+type af[T input] func(handlerFunc[T]) handlerFunc[T]

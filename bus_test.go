@@ -174,13 +174,12 @@ func TestPublish_WithMiddleware(t *testing.T) {
 
 	New()
 
-	val := "Benbe"
-
+	val := ""
 	err := Subscribe("greeting", func(ctx context.Context, name string) error {
 		val = name
 
 		return nil
-	})
+	}, WithMiddleware(lowerMiddleware))
 
 	if err != nil {
 		t.Error("expected no error")
@@ -192,8 +191,8 @@ func TestPublish_WithMiddleware(t *testing.T) {
 		t.Error("expected no error")
 	}
 
-	if val != "Benbe" {
-		t.Error("expected val to be Benbe")
+	if val != "benbe" {
+		t.Error("expected val to be benbe")
 	}
 }
 
@@ -201,9 +200,11 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware[T string](next handlerFunc[T]) handlerFunc[T] {
-	return func(ctx context.Context, data T) error {
+func lowerMiddleware(next middlewareHandlerFunc) middlewareHandlerFunc {
+	return func(ctx context.Context, data input) error {
 		str, ok := any(data).(string)
+
+		fmt.Println("eaeae222", str, ok)
 
 		if !ok {
 			return fmt.Errorf("expected data to be of type string")
@@ -211,6 +212,6 @@ func lowerMiddleware[T string](next handlerFunc[T]) handlerFunc[T] {
 
 		lower := strings.ToLower(str)
 
-		return next(ctx, T(lower))
+		return next(ctx, lower)
 	}
 }
