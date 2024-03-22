@@ -13,11 +13,11 @@ type input interface{}
 
 // bus is a struct that holds the topics and their handlers
 type bus struct {
-	topics map[string][]interface{}
+	topics map[string][]handler
 }
 
-// GetTopic returns the handlers for a given topic
-func (b *bus) GetTopic(topic string) ([]interface{}, bool) {
+// getTopic returns the handlers for a given topic
+func (b *bus) getTopic(topic string) ([]handler, bool) {
 	handlers, ok := b.topics[topic]
 
 	return handlers, ok
@@ -26,15 +26,15 @@ func (b *bus) GetTopic(topic string) ([]interface{}, bool) {
 // initHandler initializes a topic
 func (b *bus) initHandler(topic string) {
 	if _, ok := b.topics[topic]; !ok {
-		b.topics[topic] = make([]interface{}, 0)
+		b.topics[topic] = make([]handler, 0)
 	}
 }
 
 // addHandler adds a handler to a topic
-func (b *bus) addHandler(topic string, h input) error {
+func (b *bus) addHandler(topic string, handle handler) error {
 	b.initHandler(topic)
 
-	b.topics[topic] = append(b.topics[topic], h)
+	b.topics[topic] = append(b.topics[topic], handle)
 
 	return nil
 }
@@ -42,7 +42,7 @@ func (b *bus) addHandler(topic string, h input) error {
 // New creates a new bus
 func New() *bus {
 	b := &bus{
-		topics: make(map[string][]interface{}),
+		topics: make(map[string][]handler),
 	}
 
 	if defaultBus == nil {
@@ -53,55 +53,50 @@ func New() *bus {
 }
 
 // Subscribe adds a handler to a topic
-func Subscribe[T input](topic string, fn handlerFunc[T], opts ...subscribeOption) *handler[T] {
-	c := newSubscribeConfig(opts...)
+func Subscribe[T input](topic string, fn handleFunc[T], opts ...subscribeOption) *handle[T] {
+	cfg := newSubscribeConfig(opts...)
+	hdl := newHandler[T](fn, cfg)
 
-	middlewares := make([]middlewareFunc[T], 0)
-
-	for _, m := range c.middlewares {
-		middleware, ok := m.(func(handlerFunc[T]) handlerFunc[T])
-
-		if !ok {
-			fmt.Println("INVALID_MIDDLEWARE: The middleware is not compatible with the handler")
-			continue
+	if cfg.bus == nil {
+		if defaultBus == nil {
+			New()
 		}
 
-		middlewares = append(middlewares, middleware)
+		cfg.bus = defaultBus
 	}
 
-	h := &handler[T]{
-		name:        c.name,
-		fn:          fn,
-		middlewares: middlewares,
+	if cfg.name == "" {
+		cfg.name = fmt.Sprintf("topic: %s", topic)
 	}
 
-	if c.bus == nil {
-		c.bus = defaultBus
-	}
-
-	if err := c.bus.addHandler(topic, h); err != nil {
+	if err := cfg.bus.addHandler(topic, hdl); err != nil {
+		fmt.Printf("ERROR: %s\n", err.Error())
 		return nil
 	}
 
-	return h
+	return hdl
 }
 
 // Publish publishes data to a topic
 func Publish[T input](topic string, ctx context.Context, data T, opts ...publishOption) error {
-	c := newPublishConfig(opts...)
-	handlers := c.bus.topics[topic]
+	cfg := newPublishConfig(opts...)
+	bus := cfg.bus
+	hdl, ok := bus.getTopic(topic)
 
-	for _, hndl := range handlers {
-		h, ok := hndl.(*handler[T])
+	if !ok {
+		return ErrTopicDoesNotExist
+	}
+
+	for _, hndl := range hdl {
+		handle, ok := hndl.(*handle[T])
 
 		if !ok {
-			// ErrInvalidHandler
 			fmt.Println("INVALID_HANDLER: The handler is not compatible with the topic")
 			continue
 		}
 
-		if err := h.run(ctx, data); err != nil {
-			return err
+		if err := handle.run(ctx, data); err != nil {
+			fmt.Printf("ERROR: %s\n", err.Error())
 		}
 	}
 
@@ -111,9 +106,8 @@ func Publish[T input](topic string, ctx context.Context, data T, opts ...publish
 // pubsubConfig allows to configure the subscription and the publishing of a
 // handler
 type pubsubConfig struct {
-	name        string
-	bus         *bus
-	middlewares []interface{}
+	name string
+	bus  *bus
 }
 
 // subscribeOption applies a configuration to a pubsubConfig. These options are
@@ -201,36 +195,56 @@ func WithBus(b *bus) pubsubOptionFunc {
 	}
 }
 
-// WithMiddleware adds a middleware to the handler
-func WithMiddleware(m interface{}) subscribeOptionFunc {
-	return func(c *pubsubConfig) {
-		c.middlewares = append(c.middlewares, m)
-	}
+// handler is an interface that defines the handler behavior of a handler in
+// a bus
+type handler interface {
+	// run(context.Context, input) error
+	HandleFunc() interface{}
+	Name() string
 }
 
-// handlerFunc is a function that handles the data of a topic
-type handlerFunc[T input] func(context.Context, T) error
+var _ handler = (*handle[input])(nil)
 
-// handler is a struct that holds the name and the function of a handler
-type handler[T input] struct {
+// handleFunc is a function that handles the data of a topic
+type handleFunc[T input] func(context.Context, T) error
+
+// handle is a struct that holds the name and the function of a handle
+type handle[T input] struct {
 	name        string
-	fn          handlerFunc[T]
+	handleFunc  handleFunc[T]
 	middlewares []middlewareFunc[T]
 }
 
-func (h *handler[T]) Use(m ...middlewareFunc[T]) {
+func (h *handle[T]) Use(m ...middlewareFunc[T]) {
 	h.middlewares = append(h.middlewares, m...)
 }
 
-func (h *handler[T]) run(ctx context.Context, data T) error {
-	handler := h.fn
+func (h *handle[T]) run(ctx context.Context, data T) error {
+	handleFunc := h.handleFunc
 
 	for i := len(h.middlewares) - 1; i >= 0; i-- {
-		handler = h.middlewares[i](handler)
+		handleFunc = h.middlewares[i](handleFunc)
 	}
 
-	return handler(ctx, data)
+	return handleFunc(ctx, data)
 }
 
-// middlewareFunc is a function that wraps a handlerFunc
-type middlewareFunc[T input] func(handlerFunc[T]) handlerFunc[T]
+func (h *handle[T]) Name() string {
+	return h.name
+}
+
+func (h *handle[T]) HandleFunc() interface{} {
+	return h.handleFunc
+}
+
+// newHandler creates a new handle
+func newHandler[T input](handleFunc handleFunc[T], cfg *pubsubConfig) *handle[T] {
+	return &handle[T]{
+		name:        cfg.name,
+		handleFunc:  handleFunc,
+		middlewares: make([]middlewareFunc[T], 0),
+	}
+}
+
+// middlewareFunc is a function that wraps a handleFunc
+type middlewareFunc[T input] func(handleFunc[T]) handleFunc[T]

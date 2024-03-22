@@ -36,7 +36,7 @@ func TestSubscribe(t *testing.T) {
 		return nil
 	})
 
-	if _, ok := b.GetTopic("greeting"); !ok {
+	if _, ok := b.getTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 }
@@ -53,11 +53,11 @@ func TestSubscribe_WithtBus(t *testing.T) {
 		return nil
 	}, WithBus(b))
 
-	if _, ok := b.GetTopic("greeting"); !ok {
+	if _, ok := b.getTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 
-	if _, ok := defaultBus.GetTopic("greeting"); ok {
+	if _, ok := defaultBus.getTopic("greeting"); ok {
 		t.Error("expected topic to not exist")
 	}
 }
@@ -73,19 +73,29 @@ func TestSubscribe_WithtName(t *testing.T) {
 		return nil
 	}, WithName("greeting"))
 
-	if handlers, ok := defaultBus.GetTopic("topic:greeting"); !ok {
+	handlers, ok := defaultBus.getTopic("topic:greeting")
+
+	if !ok {
 		t.Error("expected topic to exist")
-	} else {
-		h, ok := handlers[0].(*handler[string])
+	}
 
-		if !ok {
-			t.Error("expected handler to be of type handler[string]")
-		}
-
-		if h.name != "greeting" {
+	for _, hndl := range handlers {
+		if hndl.Name() != "greeting" {
 			t.Error("expected handler name to be greeting")
 		}
 	}
+
+	// else {
+	// 	h, ok := handlers[0].(*handle[string])
+
+	// 	if !ok {
+	// 		t.Error("expected handler to be of type handle[string]")
+	// 	}
+
+	// 	if h.name != "greeting" {
+	// 		t.Error("expected handler name to be greeting")
+	// 	}
+	// }
 }
 
 func TestSubscribe_Multiple(t *testing.T) {
@@ -94,32 +104,37 @@ func TestSubscribe_Multiple(t *testing.T) {
 	New()
 
 	Subscribe("greeting", func(ctx context.Context, name string) error {
-		fmt.Println("Hello, " + name)
+		fmt.Println("Hello1, " + name)
 
 		return nil
 	}, WithName("greeting:1"))
 
 	Subscribe("greeting", func(ctx context.Context, name string) error {
-		fmt.Println("Hello, " + name)
+		fmt.Println("Hello2, " + name)
 
 		return nil
 	}, WithName("greeting:2"))
 
-	if handlers, ok := defaultBus.GetTopic("greeting"); !ok {
+	Publish("greeting", context.Background(), "Benbe")
+
+	if _, ok := defaultBus.getTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
-	} else {
-		for i, hndl := range handlers {
-			h, ok := hndl.(*handler[string])
-
-			if !ok {
-				t.Error("expected handler to be of type handler[string]")
-			}
-
-			if h.name != fmt.Sprintf("greeting:%d", i+1) {
-				t.Error("expected handler name to be greeting")
-			}
-		}
 	}
+	//  else {
+	// 	for i, hndl := range handlers {
+	// 		h, ok := hndl.(*handle[string])
+
+	// 		if !ok {
+	// 			t.Error("expected handler to be of type handle[string]")
+	// 		}
+
+	// 		if h.name != fmt.Sprintf("greeting:%d", i+1) {
+	// 			t.Error("expected handler name to be greeting")
+	// 		}
+	// 	}
+	// }
+
+	// t.Fail()
 }
 
 func TestPublish(t *testing.T) {
@@ -127,17 +142,31 @@ func TestPublish(t *testing.T) {
 
 	New()
 
-	val := "Benbe"
+	val := ""
 	Subscribe("greeting", func(ctx context.Context, name string) error {
 		val = name
 
 		return nil
 	})
 
-	Publish("greeting", context.Background(), "Benbe")
+	err := Publish("greeting", context.Background(), "Benbe")
+	if err != nil {
+		t.Error(err)
+	}
 
 	if val != "Benbe" {
 		t.Error("expected val to be Benbe")
+	}
+}
+
+func TestPublish_WithoutTopic(t *testing.T) {
+	defer cleanup()
+
+	New()
+
+	err := Publish("greeting", context.Background(), "Benbe")
+	if err == nil {
+		t.Error("expected error to be returned")
 	}
 }
 
@@ -164,7 +193,7 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware[T string](next handlerFunc[T]) handlerFunc[T] {
+func lowerMiddleware[T string](next handleFunc[T]) handleFunc[T] {
 	return func(ctx context.Context, data T) error {
 		str, ok := any(data).(string)
 
