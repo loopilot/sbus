@@ -3,6 +3,7 @@ package sbus
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -168,6 +169,48 @@ func TestPublish(t *testing.T) {
 	}
 }
 
+func TestPublish_WithMiddleware(t *testing.T) {
+	defer cleanup()
+
+	New()
+
+	val := "Benbe"
+
+	err := Subscribe("greeting", func(ctx context.Context, name string) error {
+		val = name
+
+		return nil
+	})
+
+	if err != nil {
+		t.Error("expected no error")
+	}
+
+	err = Publish("greeting", context.Background(), "Benbe")
+
+	if err != nil {
+		t.Error("expected no error")
+	}
+
+	if val != "Benbe" {
+		t.Error("expected val to be Benbe")
+	}
+}
+
 func cleanup() {
 	defaultBus = nil
+}
+
+func lowerMiddleware[T string](next handlerFunc[T]) handlerFunc[T] {
+	return func(ctx context.Context, data T) error {
+		str, ok := any(data).(string)
+
+		if !ok {
+			return fmt.Errorf("expected data to be of type string")
+		}
+
+		lower := strings.ToLower(str)
+
+		return next(ctx, T(lower))
+	}
 }

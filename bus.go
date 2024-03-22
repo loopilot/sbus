@@ -79,9 +79,13 @@ func Publish[T input](topic string, ctx context.Context, data T) error {
 			continue
 		}
 
-		if err := h.fn(ctx, data); err != nil {
+		if err := h.run(ctx, data); err != nil {
 			return err
 		}
+
+		// if err := h.fn(ctx, data); err != nil {
+		// 	return err
+		// }
 	}
 
 	return nil
@@ -130,6 +134,14 @@ type handler[T input] struct {
 	name        string
 	fn          handlerFunc[T]
 	middlewares []middlewareFunc[T]
+}
+
+func (h *handler[T]) run(ctx context.Context, data T) error {
+	for _, m := range h.middlewares {
+		h.fn = m(h.fn)
+	}
+
+	return h.fn(ctx, data)
 }
 
 // middlewareFunc is a function that wraps a handlerFunc
