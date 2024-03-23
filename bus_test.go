@@ -36,7 +36,7 @@ func TestSubscribe(t *testing.T) {
 		return nil
 	})
 
-	if _, ok := b.getTopic("greeting"); !ok {
+	if _, ok := b.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 }
@@ -53,11 +53,11 @@ func TestSubscribe_WithtBus(t *testing.T) {
 		return nil
 	}, WithBus(b))
 
-	if _, ok := b.getTopic("greeting"); !ok {
+	if _, ok := b.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 
-	if _, ok := defaultBus.getTopic("greeting"); ok {
+	if _, ok := defaultBus.GetTopic("greeting"); ok {
 		t.Error("expected topic to not exist")
 	}
 }
@@ -73,7 +73,7 @@ func TestSubscribe_WithtName(t *testing.T) {
 		return nil
 	}, WithName("greeting"))
 
-	handlers, ok := defaultBus.getTopic("topic:greeting")
+	handlers, ok := defaultBus.GetTopic("topic:greeting")
 
 	if !ok {
 		t.Error("expected topic to exist")
@@ -84,18 +84,30 @@ func TestSubscribe_WithtName(t *testing.T) {
 			t.Error("expected handler name to be greeting")
 		}
 	}
+}
 
-	// else {
-	// 	h, ok := handlers[0].(*handle[string])
+func TestSubscribe_WithMetadata(t *testing.T) {
+	defer cleanup()
 
-	// 	if !ok {
-	// 		t.Error("expected handler to be of type handle[string]")
-	// 	}
+	New()
 
-	// 	if h.name != "greeting" {
-	// 		t.Error("expected handler name to be greeting")
-	// 	}
-	// }
+	Subscribe("greeting", func(ctx context.Context, name string) error {
+		fmt.Println("Hello, " + name)
+
+		return nil
+	}, WithMetadata("key", "value"))
+
+	handlers, ok := defaultBus.GetTopic("greeting")
+
+	if !ok {
+		t.Error("expected topic to exist")
+	}
+
+	for _, hndl := range handlers {
+		if v, ok := hndl.Metadata("key"); !ok || v != "value" {
+			t.Error("expected metadata to be set")
+		}
+	}
 }
 
 func TestSubscribe_Multiple(t *testing.T) {
@@ -117,7 +129,7 @@ func TestSubscribe_Multiple(t *testing.T) {
 
 	Publish("greeting", context.Background(), "Benbe")
 
-	if _, ok := defaultBus.getTopic("greeting"); !ok {
+	if _, ok := defaultBus.GetTopic("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 }
@@ -165,7 +177,7 @@ func TestPublish_WithMiddleware(t *testing.T) {
 		val = name
 
 		return nil
-	}).Use(lowerMiddleware, LogMiddleware, OtelMiddleware)
+	}).Use(lowerMiddleware) // LogMiddleware, OtelMiddleware
 
 	Publish("greeting", context.Background(), "Benbe")
 
@@ -178,7 +190,7 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware[T string](next HandleFunc[T]) HandleFunc[T] {
+func lowerMiddleware[T string](h Handler[T], c *PubsubConfig) HandleFunc[T] {
 	return func(ctx context.Context, data T) error {
 		str, ok := any(data).(string)
 
@@ -188,7 +200,9 @@ func lowerMiddleware[T string](next HandleFunc[T]) HandleFunc[T] {
 
 		lower := strings.ToLower(str)
 
-		return next(ctx, T(lower))
+		return h.Next(ctx, T(lower))
+
+		// return next(ctx, T(lower))
 	}
 }
 

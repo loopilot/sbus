@@ -16,14 +16,14 @@ type bus struct {
 	topics map[string][]handler
 }
 
-// getTopic returns the handlers for a given topic
-func (b *bus) getTopic(topic string) ([]handler, bool) {
+// returns the handlers for a given topic
+func (b *bus) GetTopic(topic string) ([]handler, bool) {
 	handlers, ok := b.topics[topic]
 
 	return handlers, ok
 }
 
-// initHandler initializes a topic
+// initializes a topic
 func (b *bus) initHandler(topic string) {
 	if _, ok := b.topics[topic]; !ok {
 		b.topics[topic] = make([]handler, 0)
@@ -31,12 +31,10 @@ func (b *bus) initHandler(topic string) {
 }
 
 // addHandler adds a handler to a topic
-func (b *bus) addHandler(topic string, handle handler) error {
+func (b *bus) addHandler(topic string, handle handler) {
 	b.initHandler(topic)
 
 	b.topics[topic] = append(b.topics[topic], handle)
-
-	return nil
 }
 
 // New creates a new bus
@@ -53,8 +51,8 @@ func New() *bus {
 }
 
 // Subscribe adds a handler to a topic
-func Subscribe[T input](topic string, fn HandleFunc[T], opts ...subscribeOption) *handle[T] {
-	cfg := newSubscribeConfig(opts...)
+func Subscribe[T input](topic string, fn HandleFunc[T], opts ...SubscribeOption) *handle[T] {
+	cfg := NewSubscribeConfig(opts...)
 	hdl := newHandler[T](fn, cfg)
 
 	if cfg.bus == nil {
@@ -69,19 +67,16 @@ func Subscribe[T input](topic string, fn HandleFunc[T], opts ...subscribeOption)
 		cfg.name = fmt.Sprintf("topic: %s", topic)
 	}
 
-	if err := cfg.bus.addHandler(topic, hdl); err != nil {
-		fmt.Printf("ERROR: %s\n", err.Error())
-		return nil
-	}
+	cfg.bus.addHandler(topic, hdl)
 
 	return hdl
 }
 
 // Publish publishes data to a topic
-func Publish[T input](topic string, ctx context.Context, data T, opts ...publishOption) error {
-	cfg := newPublishConfig(opts...)
+func Publish[T input](topic string, ctx context.Context, data T, opts ...PublishOption) error {
+	cfg := NewPublishConfig(opts...)
 	bus := cfg.bus
-	hdl, ok := bus.getTopic(topic)
+	hdl, ok := bus.GetTopic(topic)
 
 	if !ok {
 		return ErrTopicDoesNotExist
@@ -95,7 +90,7 @@ func Publish[T input](topic string, ctx context.Context, data T, opts ...publish
 			continue
 		}
 
-		if err := handle.run(ctx, data); err != nil {
+		if err := handle.run(ctx, data, cfg); err != nil {
 			fmt.Printf("ERROR: %s\n", err.Error())
 		}
 	}
@@ -103,30 +98,36 @@ func Publish[T input](topic string, ctx context.Context, data T, opts ...publish
 	return nil
 }
 
-// pubsubConfig allows to configure the subscription and the publishing of a
+// PubsubConfig allows to configure the subscription and the publishing of a
 // handler
-type pubsubConfig struct {
-	name string
-	bus  *bus
+type PubsubConfig struct {
+	name     string
+	bus      *bus
+	metadata metadata
 }
 
-// subscribeOption applies a configuration to a pubsubConfig. These options are
+func (c *PubsubConfig) Metadata() metadata {
+	return c.metadata
+}
+
+// SubscribeOption applies a configuration to a PubsubConfig. These options are
 // only applicable when subscribing to a topic
-type subscribeOption interface {
-	applySubscribe(*pubsubConfig)
+type SubscribeOption interface {
+	applySubscribe(*PubsubConfig)
 }
 
-type subscribeOptionFunc func(*pubsubConfig)
+type SubscribeOptionFunc func(*PubsubConfig)
 
-func (f subscribeOptionFunc) applySubscribe(c *pubsubConfig) {
+func (f SubscribeOptionFunc) applySubscribe(c *PubsubConfig) {
 	f(c)
 }
 
-var _ subscribeOption = subscribeOptionFunc(nil)
+var _ SubscribeOption = SubscribeOptionFunc(nil)
 
-func newSubscribeConfig(opts ...subscribeOption) *pubsubConfig {
-	c := &pubsubConfig{
-		bus: defaultBus,
+func NewSubscribeConfig(opts ...SubscribeOption) *PubsubConfig {
+	c := &PubsubConfig{
+		bus:      defaultBus,
+		metadata: make(metadata),
 	}
 
 	for _, opt := range opts {
@@ -136,23 +137,24 @@ func newSubscribeConfig(opts ...subscribeOption) *pubsubConfig {
 	return c
 }
 
-// publishOption applies a configuration to a pubsubConfig. These options are
+// PublishOption applies a configuration to a PubsubConfig. These options are
 // only applicable when publishing to a topic
-type publishOption interface {
-	applyPublish(*pubsubConfig)
+type PublishOption interface {
+	applyPublish(*PubsubConfig)
 }
 
-type publishOptionFunc func(*pubsubConfig)
+type PublishOptionFunc func(*PubsubConfig)
 
-func (f publishOptionFunc) applyPublish(c *pubsubConfig) {
+func (f PublishOptionFunc) applyPublish(c *PubsubConfig) {
 	f(c)
 }
 
-var _ publishOption = publishOptionFunc(nil)
+var _ PublishOption = PublishOptionFunc(nil)
 
-func newPublishConfig(opts ...publishOption) *pubsubConfig {
-	c := &pubsubConfig{
-		bus: defaultBus,
+func NewPublishConfig(opts ...PublishOption) *PubsubConfig {
+	c := &PubsubConfig{
+		bus:      defaultBus,
+		metadata: make(metadata),
 	}
 
 	for _, opt := range opts {
@@ -162,48 +164,64 @@ func newPublishConfig(opts ...publishOption) *pubsubConfig {
 	return c
 }
 
-// pubsubOption applies a configuration to a pubsubConfig. These options are
+// PubsubOption applies a configuration to a PubsubConfig. These options are
 // applicable when subscribing and publishing to a topic
-type pubsubOption interface {
-	subscribeOption
-	publishOption
+type PubsubOption interface {
+	SubscribeOption
+	PublishOption
 }
 
-type pubsubOptionFunc func(*pubsubConfig)
+type PubsubOptionFunc func(*PubsubConfig)
 
-func (f pubsubOptionFunc) applySubscribe(c *pubsubConfig) {
+func (f PubsubOptionFunc) applySubscribe(c *PubsubConfig) {
 	f(c)
 }
 
-func (f pubsubOptionFunc) applyPublish(c *pubsubConfig) {
+func (f PubsubOptionFunc) applyPublish(c *PubsubConfig) {
 	f(c)
 }
 
-var _ pubsubOption = pubsubOptionFunc(nil)
+var _ PubsubOption = PubsubOptionFunc(nil)
 
 // WithName sets the name of the handler
-func WithName(name string) subscribeOptionFunc {
-	return func(c *pubsubConfig) {
+func WithName(name string) SubscribeOptionFunc {
+	return func(c *PubsubConfig) {
 		c.name = name
 	}
 }
 
 // WithBus sets the bus of the handler
-func WithBus(b *bus) pubsubOptionFunc {
-	return func(c *pubsubConfig) {
+func WithBus(b *bus) PubsubOptionFunc {
+	return func(c *PubsubConfig) {
 		c.bus = b
+	}
+}
+
+// WithMetadata sets the metadata of the handler
+func WithMetadata(key string, value interface{}) PubsubOptionFunc {
+	return func(c *PubsubConfig) {
+		c.metadata.Set(key, value)
 	}
 }
 
 // handler is an interface that defines the handler behavior of a handler in
 // a bus
 type handler interface {
+	Name() string
+	Metadata(key string) (interface{}, bool)
+
 	// run(context.Context, input) error
-	HandleFunc() interface{}
+	// HandleFunc() interface{}
+	// HandleFunc() interface{}
+}
+
+type Handler[T input] interface {
+	Next(ctx context.Context, data T) error
 	Name() string
 }
 
 var _ handler = (*handle[input])(nil)
+var _ Handler[input] = (*handle[input])(nil)
 
 // handleFunc is a function that handles the data of a topic
 type HandleFunc[T input] func(context.Context, T) error
@@ -213,6 +231,15 @@ type handle[T input] struct {
 	name        string
 	handleFunc  HandleFunc[T]
 	middlewares []middlewareFunc[T]
+	metadata    metadata
+}
+
+func (h *handle[T]) Metadata(key string) (interface{}, bool) {
+	return h.metadata.Get(key)
+}
+
+func (h *handle[T]) Next(ctx context.Context, data T) error {
+	return h.handleFunc(ctx, data)
 }
 
 func (h *handle[T]) Use(m ...middlewareFunc[T]) {
@@ -227,11 +254,11 @@ func (h *handle[T]) HandleFunc() interface{} {
 	return h.handleFunc
 }
 
-func (h *handle[T]) run(ctx context.Context, data T) error {
+func (h *handle[T]) run(ctx context.Context, data T, c *PubsubConfig) error {
 	handleFunc := h.handleFunc
 
 	for i := len(h.middlewares) - 1; i >= 0; i-- {
-		handleFunc = h.middlewares[i](handleFunc)
+		handleFunc = h.middlewares[i](h, c)
 	}
 
 	return handleFunc(h.setupPublishContext(ctx), data)
@@ -244,13 +271,28 @@ func (h *handle[T]) setupPublishContext(c context.Context) context.Context {
 }
 
 // newHandler creates a new handle
-func newHandler[T input](handleFunc HandleFunc[T], cfg *pubsubConfig) *handle[T] {
+func newHandler[T input](handleFunc HandleFunc[T], cfg *PubsubConfig) *handle[T] {
 	return &handle[T]{
 		name:        cfg.name,
 		handleFunc:  handleFunc,
 		middlewares: make([]middlewareFunc[T], 0),
+		metadata:    cfg.metadata,
 	}
 }
 
 // middlewareFunc is a function that wraps a handleFunc
-type middlewareFunc[T input] func(HandleFunc[T]) HandleFunc[T]
+type middlewareFunc[T input] func(Handler[T], *PubsubConfig) HandleFunc[T]
+
+// type middlewareFunc[T input] func(*handle[T]) HandleFunc[T]
+
+type metadata map[string]interface{}
+
+func (m metadata) Get(key string) (interface{}, bool) {
+	val, ok := m[key]
+
+	return val, ok
+}
+
+func (m metadata) Set(key string, val interface{}) {
+	m[key] = val
+}
