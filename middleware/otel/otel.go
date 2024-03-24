@@ -10,12 +10,12 @@ import (
 
 func Otel[T any](h sbus.Handler, c sbus.PubsubConfig) sbus.HandleFunc[T] {
 	return func(ctx context.Context, i T) error {
-		if g, ok := c.Metadata().Get("group"); ok {
+		if g, ok := h.Metadata("group"); ok {
 			ctx = context.WithValue(ctx, "group", g)
 		}
 
 		// when the handler has no group we create a new span linked to the parent span
-		if g, ok := c.Metadata().Get("group"); !ok {
+		if g, ok := h.Metadata("group"); !ok {
 			link := trace.LinkFromContext(ctx)
 			ctxn := context.Background()
 			ctx, span := otel.Tracer("").Start(ctxn, h.Name(), trace.WithLinks(link))
