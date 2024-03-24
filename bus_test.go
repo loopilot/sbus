@@ -36,8 +36,16 @@ func TestSubscribe(t *testing.T) {
 		return nil
 	})
 
-	if _, ok := b.GetTopic("greeting"); !ok {
+	if h, ok := b.getHandle("greeting"); !ok {
 		t.Error("expected topic to exist")
+	} else {
+		if len(h) != 1 {
+			t.Error("expected handler to be added")
+		}
+
+		if h[0].Name() != "topic: greeting" {
+			t.Error("expected handler name to be topic: greeting")
+		}
 	}
 }
 
@@ -53,11 +61,11 @@ func TestSubscribe_WithtBus(t *testing.T) {
 		return nil
 	}, WithBus(b))
 
-	if _, ok := b.GetTopic("greeting"); !ok {
+	if _, ok := b.getHandle("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 
-	if _, ok := defaultBus.GetTopic("greeting"); ok {
+	if _, ok := defaultBus.getHandle("greeting"); ok {
 		t.Error("expected topic to not exist")
 	}
 }
@@ -73,7 +81,7 @@ func TestSubscribe_WithtName(t *testing.T) {
 		return nil
 	}, WithName("greeting"))
 
-	handlers, ok := defaultBus.GetTopic("topic:greeting")
+	handlers, ok := defaultBus.getHandle("topic:greeting")
 
 	if !ok {
 		t.Error("expected topic to exist")
@@ -97,7 +105,7 @@ func TestSubscribe_WithMetadata(t *testing.T) {
 		return nil
 	}, WithMetadata("key", "value"))
 
-	handlers, ok := defaultBus.GetTopic("greeting")
+	handlers, ok := defaultBus.getHandle("greeting")
 
 	if !ok {
 		t.Error("expected topic to exist")
@@ -129,7 +137,7 @@ func TestSubscribe_Multiple(t *testing.T) {
 
 	Publish("greeting", context.Background(), "Benbe")
 
-	if _, ok := defaultBus.GetTopic("greeting"); !ok {
+	if _, ok := defaultBus.getHandle("greeting"); !ok {
 		t.Error("expected topic to exist")
 	}
 }
@@ -190,7 +198,7 @@ func cleanup() {
 	defaultBus = nil
 }
 
-func lowerMiddleware[T string](h Handler[T], c *PubsubConfig) HandleFunc[T] {
+func lowerMiddleware[T string](h Handler, c PubsubConfig) HandleFunc[T] {
 	return func(ctx context.Context, data T) error {
 		str, ok := any(data).(string)
 
@@ -200,7 +208,7 @@ func lowerMiddleware[T string](h Handler[T], c *PubsubConfig) HandleFunc[T] {
 
 		lower := strings.ToLower(str)
 
-		return h.Next(ctx, T(lower))
+		return h.Handle(ctx, T(lower))
 
 		// return next(ctx, T(lower))
 	}

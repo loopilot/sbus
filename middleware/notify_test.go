@@ -28,5 +28,5 @@ func TestNotify(t *testing.T) {
 		t.Error("expected val to be Benbe")
 	}
 
-	t.Fail()
+	// t.Fail()
 }

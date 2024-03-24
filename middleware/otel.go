@@ -7,30 +7,11 @@ import (
 	"go.opentelemetry.io/otel"
 )
 
-func Otel[T any](next sbus.HandleFunc[T]) sbus.HandleFunc[T] {
+func Otel[T any](h sbus.Handler, c sbus.PubsubConfig) sbus.HandleFunc[T] {
 	return func(ctx context.Context, i T) error {
-		name, ok := ctx.Value("name").(string)
-
-		if !ok {
-		}
-
-		ctx, span := otel.Tracer("").Start(ctx, name)
+		ctx, span := otel.Tracer("").Start(ctx, h.Name())
 		defer span.End()
 
-		return next(ctx, i)
-	}
-}
-
-func Otel2[T any](next sbus.HandleFunc[T]) sbus.HandleFunc[T] {
-	return func(ctx context.Context, i T) error {
-		name, ok := ctx.Value("name").(string)
-
-		if !ok {
-		}
-
-		ctx, span := otel.Tracer("").Start(ctx, name)
-		defer span.End()
-
-		return next(ctx, i)
+		return h.Handle(ctx, i)
 	}
 }

@@ -5,6 +5,10 @@ import (
 	"testing"
 )
 
+func init() {
+
+}
+
 func BenchmarkPublish(b *testing.B) {
 	New()
 
@@ -17,7 +21,11 @@ func BenchmarkPublish(b *testing.B) {
 
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		Publish("greeting", context.Background(), "John")
+		err := Publish("greeting", context.Background(), "John")
+
+		if err != nil {
+			b.Error(err)
+		}
 	}
 }
 
