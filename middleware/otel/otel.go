@@ -10,7 +10,7 @@ import (
 
 func Otel[T any](h sbus.Handler, c sbus.PubsubConfig) sbus.HandleFunc[T] {
 	return func(ctx context.Context, i T) error {
-		if g, ok := c.Metadata().Get("group"); !ok {
+		if g, ok := c.Metadata().Get("group"); ok {
 			ctx = context.WithValue(ctx, "group", g)
 		}
 
